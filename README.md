@@ -1,16 +1,12 @@
-# PacketTracer_Creator & NetDoctor NOC (`pkt_generator` v1.1)
+# PacketTracer_Creator & NetDoctor NOC (`pkt_generator` v1.2)
 
 Generate valid, pre-configured Cisco Packet Tracer (`.pkt`) network files offline from Python or JSON—and practice **CCNA (200-301 v2.0)** troubleshooting and network engineering in the **NetDoctor NOC** desktop game (`tkinter`).
 
 ---
 
-## 🚀 What's New in Version 1.1
-- **🏆 Career Mode (Levels 1–50 & Milestone Titles)**:
-  - Blind random task dispatch that dynamically scales topology complexity (`1` to `3` switches, `/24` to `/27` CIDR subnets) and simultaneous fault counts (`1` to `4` items) as your Engineer Level rises from **Level 1 (*NOC Trainee*)** to **Level 50 (*Distinguished Fellow of the NOC*)**.
-  - Mixes **Fault-Finding Tasks (~80%)** with **Greenfield Network Setup / Commissioning Tasks (~20%)**.
-  - **Live SLA Speed Timer & XP Multipliers**: Earn **⚡ Gold SLA (`1.5x XP`)**, **⏱️ Silver SLA (`1.2x XP`)**, **🎯 First-Try Solve (`+15%`)**, and **🔥 Win Streak (`+5%–25%`)** bonuses.
-- **📊 Right-Side Player Career & Stats HUD**:
-  - Dedicated right-hand HUD displaying your Engineer Rank, Level XP progress bar, live SLA stopwatch, Career Record counters, Last Task XP breakdown, Milestone Titles roadmap, and a red **`⚠️ Reset Career`** button with confirmation popup.
+## 🚀 What's New in Version 1.2
+- **🖥️ Streamlined Full-Width NOC Interface**:
+  - Removed Career Mode and the right-side stats HUD from the active interface so the **Network Blueprint & Expected Addressing** and **Interactive Visual Topology Diagram** occupy the full workspace width.
 - **🏢 Customizable Player, Company & Department Settings (`game_settings.json`)**:
   - Configure `player_name`, `company_name`, and internal `departments` (with prefix codes like `FIN-R1`, `ENG-SW1`, `SEC-SRV1`) in [`game_settings.json`](game_settings.json); changes reload live on every new task.
 - **🗺️ 12 Real-World Physical Floorplan Archetypes (1, 2 & 3 Switches)**:
@@ -19,7 +15,7 @@ Generate valid, pre-configured Cisco Packet Tracer (`.pkt`) network files offlin
   - Mouse-wheel zoom (`Zoom In` / `Zoom Out` / `Reset 100%`), left-click drag panning, and scrollbars on the Visual Topology Diagram.
   - Dedicated popup window (`💡 Diagnostic Console & Solution Reveal`) placed right next to `🔄 Quick-Check Current .pkt` so the Network Blueprint occupies the full workspace width.
 - **🧱 Modular Package Architecture**:
-  - Clean separation across `career.py`, `layouts.py`, `faults_level1.py`, `settings.py`, `verifier.py`, and `pkt_generator/game/ui/` (`constants.py`, `stats_pane.py`, `topology_canvas.py`, `diagnostic_popup.py`).
+  - Clean separation across `layouts.py`, `faults_level1.py`, `settings.py`, `verifier.py`, and `pkt_generator/game/ui/` (`constants.py`, `topology_canvas.py`, `diagnostic_popup.py`).
 
 ---
 
@@ -32,12 +28,10 @@ python play_game.py
 ```
 
 ### Game Modes
-1. **🏆 Career Mode: NOC Progression (Lvl 1–50)**:
-   - Dispatches randomized fault-finding and network setup `.pkt` work orders scaled to your current level, tracks SLA resolution speed, awards XP, and unlocks 11 Milestone Titles.
-2. **🔧 Mode 1: Break/Fix Troubleshooting**:
+1. **🔧 Mode 1: Break/Fix Troubleshooting**:
    - Practice mode allowing you to filter for any of the **16 Level 1 CCNA v2.0 faults** (or random combinations) across Layer 1 (physical power, missing patch cables, disabled NICs, speed/duplex mismatches, wrong router uplink port), Layer 2 (administratively down ports, broken switch `Vlan1` management SVI), Layer 3 (wrong subnet IP, wrong default gateway, restrictive subnet mask, duplicate IP conflicts, router/server IP typos), and Network Services (DHCP/APIPA `169.254.x.x` fallback, wrong DNS server).
    - Also includes UI presets for **Level 2 Switching, VLANs, 802.1Q Trunks, Router-on-a-Stick & EtherChannel**.
-3. **🏗️ Mode 2: Build Network from Scratch** *(UI setup ready)*:
+2. **🏗️ Mode 2: Build Network from Scratch** *(UI setup ready)*:
    - Designed for greenfield network deployment work orders with configurable Addressing Help and Hardware Cabling states.
 
 ---

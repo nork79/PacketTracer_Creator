@@ -37,15 +37,15 @@
   ],
   "career": {
     "level": 2,
-    "xp": 205,
-    "total_xp": 305,
-    "tasks_completed": 2,
-    "fault_tasks_completed": 2,
+    "xp": 35,
+    "total_xp": 135,
+    "tasks_completed": 1,
+    "fault_tasks_completed": 1,
     "setup_tasks_completed": 0,
-    "current_streak": 2,
-    "best_streak": 2,
-    "first_try_solves": 2,
-    "best_sla_seconds": 31,
+    "current_streak": 1,
+    "best_streak": 1,
+    "first_try_solves": 1,
+    "best_sla_seconds": 119,
     "hints_used_total": 0,
     "solutions_revealed_total": 0
   }

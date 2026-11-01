@@ -202,14 +202,6 @@ class TestLevel1Game(unittest.TestCase):
                 app._zoom_topology(1.15)
                 app._zoom_topology(1 / 1.15)
                 app._reset_topology_zoom()
-
-                app.settings.career.level = 12
-                app.settings.career.total_xp = 4500
-                app.settings.career.tasks_completed = 18
-                app.reset_career_progress()
-                self.assertEqual(app.settings.career.level, 1)
-                self.assertEqual(app.settings.career.total_xp, 0)
-                self.assertEqual(app.settings.career.tasks_completed, 0)
             finally:
                 root.destroy()
 

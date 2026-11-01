@@ -8,7 +8,7 @@ JSON loading, and pre-built network presets.
 
 from __future__ import annotations
 
-__version__ = "1.1.0"
+__version__ = "1.2.0"
 
 from pkt_generator.catalog import (
     MODEL_ALIASES,

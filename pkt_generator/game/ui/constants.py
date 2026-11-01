@@ -6,7 +6,6 @@ import tkinter as tk
 from tkinter import ttk
 
 MISSION_MODES: list[str] = [
-    "🏆 Career Mode: NOC Progression (Lvl 1–50)",
     "🔧 Mode 1: Break/Fix Troubleshooting",
     "🏗️ Mode 2: Build Network from Scratch",
 ]

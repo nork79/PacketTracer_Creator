@@ -7,16 +7,9 @@ from pathlib import Path
 import shutil
 import subprocess
 import sys
-import time
 import tkinter as tk
 from tkinter import filedialog, messagebox, ttk
 
-from pkt_generator.game.career import (
-    CareerProfile,
-    XPRewardBreakdown,
-    award_ticket_xp,
-    roll_career_task,
-)
 from pkt_generator.game.generator import generate_level1_challenge
 from pkt_generator.game.models import ChallengeTicket
 from pkt_generator.game.settings import GameSettings
@@ -28,11 +21,9 @@ from pkt_generator.game.ui import (
     FAULT_FILTER_OPTIONS,
     LEVEL2_FAULT_FILTER_OPTIONS,
     MISSION_MODES,
-    PlayerStatsPane,
     TROUBLESHOOT_LEVEL_OPTIONS,
     TopologyDiagramView,
     configure_ttk_styles,
-    fmt_mmss,
 )
 from pkt_generator.game.verifier import verify_pkt_file
 
@@ -48,8 +39,8 @@ class NetDoctorApp:
     ) -> None:
         self.root = root
         self.root.title("NetDoctor NOC — Packet Tracer Troubleshooting Game")
-        self.root.geometry("1420x860")
-        self.root.minsize(1160, 720)
+        self.root.geometry("1320x820")
+        self.root.minsize(1080, 700)
         self.root.configure(bg="#0f172a")
 
         self.challenges_dir = (
@@ -61,24 +52,13 @@ class NetDoctorApp:
 
         self.current_ticket: ChallengeTicket | None = None
         self.hint_index: int = 0
+        self.tickets_solved: int = 0
         self.settings: GameSettings = GameSettings.load(settings_path)
-        self.tickets_solved: int = self.settings.career.tasks_completed
-
-        # Career / SLA tracking for the active ticket
-        self.ticket_start_time: float = time.monotonic()
-        self.ticket_target_sla: int = 180
-        self.ticket_task_kind: str = "fault"
-        self.ticket_failed_attempts: int = 0
-        self.ticket_solution_revealed: bool = False
-        self.ticket_already_solved: bool = False
-        self.ticket_solved_elapsed: int = 0
-        self.last_reward: XPRewardBreakdown | None = None
 
         configure_ttk_styles(self.root)
         self._build_ui()
 
         self.generate_new_challenge()
-        self._schedule_sla_timer()
 
     def _build_ui(self) -> None:
         # ---------------- Top Header & Mission Setup Bar ----------------
@@ -144,7 +124,7 @@ class NetDoctorApp:
             textvariable=self.mission_mode_var,
             values=MISSION_MODES,
             state="readonly",
-            width=36,
+            width=34,
         )
         mode_cb.pack(side="left")
         mode_cb.bind("<<ComboboxSelected>>", self._on_mission_mode_changed)
@@ -153,41 +133,9 @@ class NetDoctorApp:
         self.mode_row_holder = tk.Frame(self.setup_container, bg="#0f172a")
         self.mode_row_holder.pack(fill="x", pady=(0, 8))
 
-        # Frame 0: Career Mode Controls
-        self.career_ctrl_frame = tk.Frame(self.mode_row_holder, bg="#0f172a")
-        self.career_ctrl_frame.pack(fill="x")
-
-        tk.Label(
-            self.career_ctrl_frame,
-            text="Difficulty:",
-            width=12,
-            anchor="w",
-            bg="#0f172a",
-            fg="#cbd5e1",
-            font=("Segoe UI", 9, "bold"),
-        ).pack(side="left", padx=(0, 6))
-
-        self.career_tier_lbl = tk.Label(
-            self.career_ctrl_frame,
-            text="Auto-Scaled by Career Level (Blind Random Faults + Network Setup Tasks)",
-            bg="#1e293b",
-            fg="#fbbf24",
-            padx=10,
-            pady=3,
-            font=("Segoe UI", 9, "bold"),
-        )
-        self.career_tier_lbl.pack(side="left", padx=(0, 12))
-
-        tk.Label(
-            self.career_ctrl_frame,
-            text="⚡ Faster SLA completion = up to 1.5x XP Bonus  •  50 Levels & Milestone Titles",
-            bg="#0f172a",
-            fg="#94a3b8",
-            font=("Segoe UI", 9),
-        ).pack(side="left")
-
         # Frame A: Mode 1 (Break/Fix Troubleshooting) Controls
         self.mode1_ctrl_frame = tk.Frame(self.mode_row_holder, bg="#0f172a")
+        self.mode1_ctrl_frame.pack(fill="x")
 
         tk.Label(
             self.mode1_ctrl_frame,
@@ -312,7 +260,7 @@ class NetDoctorApp:
 
         self.btn_new = tk.Button(
             action_row,
-            text="⚡ Dispatch Next Career Task (.pkt)",
+            text="⚡ Generate New .pkt Challenge",
             command=self.generate_new_challenge,
             bg="#0284c7",
             fg="#ffffff",
@@ -337,44 +285,23 @@ class NetDoctorApp:
         )
         self.score_label.pack(side="left")
 
-        # ---------------- Main Workspace + Right-Side Player Stats Pane ----------------
-        workspace_row = tk.Frame(self.root, bg="#0f172a")
-        workspace_row.pack(fill="both", expand=True, padx=12, pady=(4, 12))
-
-        self.stats_frame = tk.Frame(
-            workspace_row,
-            bg="#1e293b",
-            width=335,
-            padx=12,
-            pady=10,
-            highlightthickness=1,
-            highlightbackground="#334155",
-        )
-        self.stats_frame.pack(side="right", fill="y", padx=(10, 0))
-        self.stats_frame.pack_propagate(False)
-
+        # ---------------- Main Workspace Frame (Full Width) ----------------
         main_frame = tk.Frame(
-            workspace_row,
+            self.root,
             bg="#1e293b",
             padx=14,
             pady=12,
             highlightthickness=1,
             highlightbackground="#334155",
         )
-        main_frame.pack(side="left", fill="both", expand=True)
+        main_frame.pack(fill="both", expand=True, padx=12, pady=(4, 12))
 
         self._build_main_workspace(main_frame)
-        self.stats_pane = PlayerStatsPane(
-            self.stats_frame,
-            self.settings,
-            on_reset_career=self.confirm_reset_career,
-        )
         self.diag_popup = DiagnosticConsolePopup(
             self.root,
             on_hint=self.show_next_hint,
             on_reveal=self.reveal_what_was_wrong,
         )
-        self._update_score_badge()
 
     def _build_main_workspace(self, parent: tk.Frame) -> None:
         ticket_header = tk.Frame(parent, bg="#1e293b")
@@ -475,7 +402,7 @@ class NetDoctorApp:
             font=("Segoe UI", 10),
             justify="left",
             anchor="w",
-            wraplength=920,
+            wraplength=1150,
         )
         self.symptom_lbl.pack(fill="x", pady=(2, 0))
 
@@ -604,7 +531,7 @@ class NetDoctorApp:
         self.topology_view = TopologyDiagramView(tab_canvas)
 
     # ------------------------------------------------------------------
-    # Delegated Component Helpers & Timer
+    # Delegated Component Helpers
     # ------------------------------------------------------------------
     def open_diagnostic_popup(self) -> None:
         self.diag_popup.open()
@@ -621,99 +548,20 @@ class NetDoctorApp:
     def _reset_topology_zoom(self) -> None:
         self.topology_view.reset_zoom()
 
-    def _update_score_badge(self) -> None:
-        c = self.settings.career
-        self.score_label.configure(
-            text=f"Solved: {c.tasks_completed}  |  Lvl {c.level}: {c.title} ({c.total_xp:,} XP)"
-        )
-
-    def _schedule_sla_timer(self) -> None:
-        self._update_sla_labels()
-        try:
-            if self.root.winfo_exists():
-                self.root.after(1000, self._schedule_sla_timer)
-        except tk.TclError:
-            pass
-
-    def _current_elapsed_seconds(self) -> int:
-        if self.ticket_already_solved:
-            return self.ticket_solved_elapsed
-        return max(0, int(time.monotonic() - self.ticket_start_time))
-
-    def _update_sla_labels(self) -> None:
-        self.stats_pane.update_sla_display(
-            elapsed_seconds=self._current_elapsed_seconds(),
-            target_sla_seconds=self.ticket_target_sla,
-            solution_revealed=self.ticket_solution_revealed,
-        )
-
-    # ------------------------------------------------------------------
-    # Career Reset Actions
-    # ------------------------------------------------------------------
-    def confirm_reset_career(self) -> None:
-        """Show a confirmation warning popup before wiping Career Mode progress."""
-        c = self.settings.career
-        confirmed = messagebox.askyesno(
-            "⚠️ Reset Career Mode Progression?",
-            (
-                f"Are you sure you want to reset Career Mode for '{self.settings.player_name}'?\n\n"
-                f"Current Progress:\n"
-                f"  • Level {c.level} ({c.title}) — {c.total_xp:,} Total XP\n"
-                f"  • {c.tasks_completed} Tasks Completed (Best Streak: {c.best_streak})\n\n"
-                "This will permanently reset your Level back to Level 1 (NOC Trainee), "
-                "XP to 0, and clear all completed task counters.\n\n"
-                "Do you want to proceed?"
-            ),
-            icon="warning",
-        )
-        if confirmed:
-            self.reset_career_progress()
-
-    def reset_career_progress(self) -> None:
-        """Reset the player's CareerProfile back to Level 1 (0 XP) and persist to settings."""
-        self.settings.career = CareerProfile()
-        self.tickets_solved = 0
-        self.last_reward = None
-        try:
-            self.settings.save()
-        except OSError:
-            pass
-        self.stats_pane.last_xp_summary_lbl.configure(
-            text="Career Mode reset to Level 1 (0 XP). Complete a task to earn XP!",
-            fg="#94a3b8",
-        )
-        self.stats_pane.refresh(self.settings)
-        self._update_score_badge()
-        self.generate_new_challenge()
-        self.status_banner.configure(
-            text="🔄 Career Mode Reset to Level 1 (NOC Trainee — 0 XP)",
-            bg="#1e293b",
-            fg="#fbbf24",
-        )
-
     # ------------------------------------------------------------------
     # Mission Mode & Challenge Generation
     # ------------------------------------------------------------------
     def _on_mission_mode_changed(self, _event: object = None) -> None:
         mode = self.mission_mode_var.get()
-        self.career_ctrl_frame.pack_forget()
-        self.mode1_ctrl_frame.pack_forget()
-        self.mode2_ctrl_frame.pack_forget()
-
-        if mode == MISSION_MODES[0]:
-            self.career_ctrl_frame.pack(fill="x")
-            c = self.settings.career
-            self.subtitle_lbl.configure(
-                text=f"Engineer on Duty: {self.settings.player_name} (Lvl {c.level} {c.title})  •  Career Mode: Random Faults & Setup Tasks with SLA Speed XP"
-            )
-            self.btn_new.configure(text="⚡ Dispatch Next Career Task (.pkt)")
-        elif mode == MISSION_MODES[2]:
+        if mode == MISSION_MODES[1]:
+            self.mode1_ctrl_frame.pack_forget()
             self.mode2_ctrl_frame.pack(fill="x")
             self.subtitle_lbl.configure(
                 text=f"Engineer on Duty: {self.settings.player_name}  •  Greenfield Provisioning: Cable, Subnet & Configure Networks from Scratch (.pkt)"
             )
             self.btn_new.configure(text="🏗️ Generate Build Mission (.pkt)")
         else:
+            self.mode2_ctrl_frame.pack_forget()
             self.mode1_ctrl_frame.pack(fill="x")
             self.subtitle_lbl.configure(
                 text=f"Engineer on Duty: {self.settings.player_name}  •  Diagnose IP & Cabling Faults in Cisco Packet Tracer (.pkt)"
@@ -734,12 +582,10 @@ class NetDoctorApp:
             text=f"🛡️ NetDoctor NOC Console — {self.settings.company_name}"
         )
         self._on_mission_mode_changed()
-        self.stats_pane.refresh(self.settings, self.last_reward)
-        self._update_score_badge()
 
         mode = self.mission_mode_var.get()
 
-        if mode == MISSION_MODES[2]:
+        if mode == MISSION_MODES[1]:
             self._clear_log()
             self._log("=== MISSION MODE 2: BUILD NETWORK FROM SCRATCH (UI SETUP) ===", "heading")
             self._log(f"  Selected Level     : {self.build_level_var.get()}", "warn")
@@ -758,7 +604,7 @@ class NetDoctorApp:
             )
             return
 
-        if mode == MISSION_MODES[1] and self.level_var.get() == TROUBLESHOOT_LEVEL_OPTIONS[1]:
+        if self.level_var.get() == TROUBLESHOOT_LEVEL_OPTIONS[1]:
             self._clear_log()
             self._log("=== LEVEL 2 TROUBLESHOOTING (UI SETUP) ===", "heading")
             self._log(f"  Selected Difficulty : {self.level_var.get()}", "warn")
@@ -777,59 +623,24 @@ class NetDoctorApp:
             )
             return
 
-        if mode == MISSION_MODES[0]:
-            spec = roll_career_task(self.settings.career.level)
-            self.career_tier_lbl.configure(text=spec.tier_label)
-            self.ticket_target_sla = spec.target_sla_seconds
-            self.ticket_task_kind = spec.task_kind
-            ticket = generate_level1_challenge(
-                self.challenges_dir,
-                num_faults=spec.num_faults,
-                allowed_prefixes=spec.allowed_prefixes,
-                allowed_archetypes=spec.allowed_archetypes,
-                allowed_fault_pool=spec.allowed_faults,
-                task_kind=spec.task_kind,
-                settings=self.settings,
-            )
-        else:
-            selected_label = self.fault_filter_var.get()
-            chosen_code: str | None = None
-            for label, code in FAULT_FILTER_OPTIONS:
-                if label == selected_label:
-                    chosen_code = code
-                    break
+        selected_label = self.fault_filter_var.get()
+        chosen_code: str | None = None
+        for label, code in FAULT_FILTER_OPTIONS:
+            if label == selected_label:
+                chosen_code = code
+                break
 
-            fault_types = [chosen_code] if chosen_code else None
-            num_faults = int(self.num_faults_var.get())
-            self.ticket_target_sla = 180 + (num_faults - 1) * 90
-            self.ticket_task_kind = "fault"
+        fault_types = [chosen_code] if chosen_code else None
+        num_faults = int(self.num_faults_var.get())
 
-            ticket = generate_level1_challenge(
-                self.challenges_dir,
-                num_faults=num_faults,
-                fault_types=fault_types,
-                settings=self.settings,
-            )
-
+        ticket = generate_level1_challenge(
+            self.challenges_dir,
+            num_faults=num_faults,
+            fault_types=fault_types,
+            settings=self.settings,
+        )
         self.current_ticket = ticket
         self.hint_index = 0
-        self.ticket_start_time = time.monotonic()
-        self.ticket_failed_attempts = 0
-        self.ticket_solution_revealed = False
-        self.ticket_already_solved = False
-        self.ticket_solved_elapsed = 0
-
-        if self.ticket_task_kind == "setup":
-            self.stats_pane.stat_task_type_lbl.configure(
-                text=f"ACTIVE TASK: 🏗️ Network Setup ({len(ticket.faults)} item(s))",
-                fg="#fbbf24",
-            )
-        else:
-            self.stats_pane.stat_task_type_lbl.configure(
-                text=f"ACTIVE TASK: 🔧 Fault Finding ({len(ticket.faults)} fault(s))",
-                fg="#38bdf8",
-            )
-        self._update_sla_labels()
 
         self.ticket_title_lbl.configure(
             text=f"Ticket #{ticket.ticket_id} — {ticket.scenario_title}"
@@ -874,11 +685,8 @@ class NetDoctorApp:
 
         total_hints = sum(len(f.hints) for f in ticket.faults)
         self.diag_popup.hint_btn.configure(text=f"💡 Get Progressive Hint (0/{total_hints})")
-        task_noun = (
-            "commissioning item(s)" if self.ticket_task_kind == "setup" else "hidden fault(s)"
-        )
         self.status_banner.configure(
-            text=f"STATUS: Task Dispatched ({len(ticket.faults)} {task_noun} — Target SLA {fmt_mmss(self.ticket_target_sla)})",
+            text=f"STATUS: Challenge Ready ({len(ticket.faults)} hidden fault(s) injected)",
             bg="#1e293b",
             fg="#fbbf24",
         )
@@ -1014,86 +822,20 @@ class NetDoctorApp:
                 )
 
         if res.all_passed:
-            if not self.ticket_already_solved:
-                self.ticket_already_solved = True
-                self.ticket_solved_elapsed = max(
-                    1, int(time.monotonic() - self.ticket_start_time)
-                )
-                num_switches = sum(
-                    1 for n in self.current_ticket.canvas_nodes if n.get("role") == "switch"
-                )
-                try:
-                    prefix_len = int(self.current_ticket.subnet_cidr.split("/")[1])
-                except (IndexError, ValueError):
-                    prefix_len = 24
-
-                reward = award_ticket_xp(
-                    self.settings.career,
-                    task_kind=self.ticket_task_kind,
-                    num_faults=len(self.current_ticket.faults),
-                    num_switches=max(1, num_switches),
-                    prefix_len=prefix_len,
-                    elapsed_seconds=self.ticket_solved_elapsed,
-                    target_sla_seconds=self.ticket_target_sla,
-                    hints_used=self.hint_index,
-                    failed_attempts=self.ticket_failed_attempts,
-                    solution_revealed=self.ticket_solution_revealed,
-                )
-                self.last_reward = reward
-                self.tickets_solved = self.settings.career.tasks_completed
-                try:
-                    self.settings.save()
-                except OSError:
-                    pass
-                self.stats_pane.refresh(self.settings, reward)
-                self._update_score_badge()
-
-                promo_msg = ""
-                if reward.unlocked_new_title:
-                    promo_msg = f"  •  🎖️ PROMOTED TO: {reward.new_title}!"
-                elif reward.leveled_up:
-                    promo_msg = f"  •  🎉 LEVEL UP -> Lvl {reward.new_level}!"
-
-                self.status_banner.configure(
-                    text=(
-                        f"✅ TASK RESOLVED! +{reward.total_xp_awarded} XP ({reward.sla_tier})"
-                        f"{promo_msg}"
-                    ),
-                    bg="#14532d",
-                    fg="#86efac",
-                )
-                self._log(
-                    f"\n🎉 CONGRATULATIONS! All {res.total_count} item(s) in {self.current_ticket.ticket_id} are resolved!",
-                    "pass",
-                )
-                self._log(
-                    f"🏆 CAREER XP BREAKDOWN (+{reward.total_xp_awarded} XP | Elapsed: {fmt_mmss(reward.elapsed_seconds)}):",
-                    "heading",
-                )
-                self._log(
-                    f"  Base XP: {reward.base_xp} | SLA Speed ({reward.sla_tier}): +{reward.speed_bonus_xp} | "
-                    f"First-Try: +{reward.first_try_bonus_xp} | Streak: +{reward.streak_bonus_xp} | Hints: -{reward.hint_penalty_xp}"
-                )
-                if reward.unlocked_new_title:
-                    self._log(
-                        f"🎖️ MILESTONE PROMOTION! You reached Level {reward.new_level} and earned the title: '{reward.new_title}'!",
-                        "pass",
-                    )
-                elif reward.leveled_up:
-                    self._log(
-                        f"⬆️ LEVEL UP! Advanced from Level {reward.old_level} to Level {reward.new_level}!",
-                        "pass",
-                    )
-            else:
-                self.status_banner.configure(
-                    text=f"✅ TASK ALREADY RESOLVED ({res.passed_count}/{res.total_count} checks passed — generate next task for more XP)",
-                    bg="#14532d",
-                    fg="#86efac",
-                )
-        else:
-            self.ticket_failed_attempts += 1
+            self.tickets_solved += 1
+            self.score_label.configure(text=f"Solved: {self.tickets_solved}")
             self.status_banner.configure(
-                text=f"❌ {res.total_count - res.passed_count} ITEM(S) REMAIN ({res.passed_count}/{res.total_count} fixed)",
+                text=f"✅ TICKET RESOLVED! ({res.passed_count}/{res.total_count} checks passed)",
+                bg="#14532d",
+                fg="#86efac",
+            )
+            self._log(
+                f"\n🎉 CONGRATULATIONS! All {res.total_count} fault(s) in {self.current_ticket.ticket_id} are fixed!",
+                "pass",
+            )
+        else:
+            self.status_banner.configure(
+                text=f"❌ {res.total_count - res.passed_count} FAULT(S) REMAIN ({res.passed_count}/{res.total_count} fixed)",
                 bg="#7f1d1d",
                 fg="#fecaca",
             )
@@ -1125,8 +867,6 @@ class NetDoctorApp:
     def reveal_what_was_wrong(self) -> None:
         if not self.current_ticket:
             return
-        self.ticket_solution_revealed = True
-        self._update_sla_labels()
         self._log("\n" + "=" * 58, "heading")
         self._log(
             f"🔓 FULL DIAGNOSTIC SOLUTION — TICKET {self.current_ticket.ticket_id}",
