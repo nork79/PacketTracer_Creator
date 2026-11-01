@@ -1,0 +1,99 @@
+{
+  "ospf_all": true,
+  "devices": [
+    {
+      "name": "R-HQ",
+      "type": "router",
+      "model": "2911",
+      "dhcp_pools": [
+        {
+          "name": "HQ-LAN",
+          "network": "10.10.1.0/24",
+          "default_router": "10.10.1.1",
+          "dns_server": "10.10.1.100",
+          "excluded_addresses": [["10.10.1.1", "10.10.1.9"]]
+        }
+      ]
+    },
+    {
+      "name": "R-BRANCH",
+      "type": "router",
+      "model": "2911"
+    },
+    {
+      "name": "SW-HQ",
+      "type": "switch",
+      "management_ip": "10.10.1.2/24",
+      "default_gateway": "10.10.1.1"
+    },
+    {
+      "name": "SW-BRANCH",
+      "type": "switch",
+      "management_ip": "10.20.1.2/24",
+      "default_gateway": "10.20.1.1"
+    },
+    {
+      "name": "HQ-PC1",
+      "type": "pc",
+      "dhcp": true
+    },
+    {
+      "name": "HQ-SRV1",
+      "type": "server",
+      "ip": "10.10.1.100/24",
+      "gateway": "10.10.1.1"
+    },
+    {
+      "name": "BR-PC1",
+      "type": "pc",
+      "ip": "10.20.1.10/24",
+      "gateway": "10.20.1.1",
+      "dns": "10.10.1.100"
+    },
+    {
+      "name": "BR-PC2",
+      "type": "pc",
+      "ip": "10.20.1.11/24",
+      "gateway": "10.20.1.1",
+      "dns": "10.10.1.100"
+    }
+  ],
+  "links": [
+    {
+      "from": "R-HQ",
+      "to": "R-BRANCH",
+      "kind": "serial",
+      "ip_a": "172.16.0.1/30",
+      "ip_b": "172.16.0.2/30",
+      "dce": "R-HQ",
+      "clock_rate": 2000000
+    },
+    {
+      "from": "R-HQ",
+      "to": "SW-HQ",
+      "ip_a": "10.10.1.1/24"
+    },
+    {
+      "from": "SW-HQ",
+      "to": "HQ-PC1"
+    },
+    {
+      "from": "SW-HQ",
+      "to": "HQ-SRV1"
+    },
+    {
+      "from": "R-BRANCH",
+      "to": "SW-BRANCH",
+      "ip_a": "10.20.1.1/24"
+    },
+    {
+      "from": "SW-BRANCH",
+      "to": "BR-PC1"
+    },
+    {
+      "from": "SW-BRANCH",
+      "to": "BR-PC2"
+    }
+  ]
+}
+

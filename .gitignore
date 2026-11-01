@@ -1,0 +1,16 @@
+# Python byte-compiled / cache
+__pycache__/
+*.py[cod]
+*$py.class
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+
+# Ephemeral generated game challenge files
+challenges/
+
+# OS / IDE metadata
+.DS_Store
+Thumbs.db
+.vscode/
+.idea/

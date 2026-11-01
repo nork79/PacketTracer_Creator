@@ -1,0 +1,85 @@
+# SPDX-License-Identifier: GPL-3.0-or-later
+name: docs
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - "docs/**"
+      - "mkdocs.yml"
+      - "hooks/**"
+      - "overrides/**"
+      - "README.md"
+      - "FORMAT.md"
+      # so a change to this workflow runs it, rather than silently waiting for
+      # the next docs edit
+      - ".github/workflows/docs.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+
+concurrency:
+  group: pages
+  cancel-in-progress: false
+
+jobs:
+  build:
+    name: build
+    runs-on: ubuntu-latest
+    outputs:
+      # Pages has to be switched on once, under Settings -> Pages, with the source
+      # set to "GitHub Actions". Until then the site is built and validated but not
+      # deployed, so the job is green rather than red. Once it is switched on, this
+      # starts deploying by itself: no workflow edit needed.
+      pages: ${{ steps.pages.outputs.enabled }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Install
+        run: |
+          python -m pip install --upgrade pip
+          pip install mkdocs-material
+
+      # --strict turns a broken internal link into a build failure, so the site
+      # cannot drift out of sync with the documents.
+      - name: Build
+        run: mkdocs build --strict
+        env:
+          NO_MKDOCS_2_WARNING: "1"
+
+      - name: Is Pages enabled?
+        id: pages
+        run: |
+          code=$(curl -s -o /dev/null -w '%{http_code}' \
+            -H "Authorization: Bearer ${{ github.token }}" \
+            "https://api.github.com/repos/${{ github.repository }}/pages")
+          if [ "$code" = "200" ]; then
+            echo "enabled=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "enabled=false" >> "$GITHUB_OUTPUT"
+            echo "::notice title=Pages not enabled::Build passed. Enable Settings -> Pages -> Source: GitHub Actions to publish this site; this workflow will then deploy automatically."
+          fi
+
+      - uses: actions/upload-pages-artifact@v3
+        if: steps.pages.outputs.enabled == 'true'
+        with:
+          path: site
+
+  deploy:
+    name: deploy
+    needs: build
+    if: needs.build.outputs.pages == 'true'
+    runs-on: ubuntu-latest
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - id: deployment
+        uses: actions/deploy-pages@v4
