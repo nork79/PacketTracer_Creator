@@ -1,6 +1,25 @@
-# PacketTracer_Creator & NetDoctor NOC (`pkt_generator`)
+# PacketTracer_Creator & NetDoctor NOC (`pkt_generator` v1.1)
 
 Generate valid, pre-configured Cisco Packet Tracer (`.pkt`) network files offline from Python or JSON—and practice **CCNA (200-301 v2.0)** troubleshooting and network engineering in the **NetDoctor NOC** desktop game (`tkinter`).
+
+---
+
+## 🚀 What's New in Version 1.1
+- **🏆 Career Mode (Levels 1–50 & Milestone Titles)**:
+  - Blind random task dispatch that dynamically scales topology complexity (`1` to `3` switches, `/24` to `/27` CIDR subnets) and simultaneous fault counts (`1` to `4` items) as your Engineer Level rises from **Level 1 (*NOC Trainee*)** to **Level 50 (*Distinguished Fellow of the NOC*)**.
+  - Mixes **Fault-Finding Tasks (~80%)** with **Greenfield Network Setup / Commissioning Tasks (~20%)**.
+  - **Live SLA Speed Timer & XP Multipliers**: Earn **⚡ Gold SLA (`1.5x XP`)**, **⏱️ Silver SLA (`1.2x XP`)**, **🎯 First-Try Solve (`+15%`)**, and **🔥 Win Streak (`+5%–25%`)** bonuses.
+- **📊 Right-Side Player Career & Stats HUD**:
+  - Dedicated right-hand HUD displaying your Engineer Rank, Level XP progress bar, live SLA stopwatch, Career Record counters, Last Task XP breakdown, Milestone Titles roadmap, and a red **`⚠️ Reset Career`** button with confirmation popup.
+- **🏢 Customizable Player, Company & Department Settings (`game_settings.json`)**:
+  - Configure `player_name`, `company_name`, and internal `departments` (with prefix codes like `FIN-R1`, `ENG-SW1`, `SEC-SRV1`) in [`game_settings.json`](game_settings.json); changes reload live on every new task.
+- **🗺️ 12 Real-World Physical Floorplan Archetypes (1, 2 & 3 Switches)**:
+  - Includes `left_to_right_pipeline`, `mdf_idf_two_closet`, `radial_star_office`, `split_wing_east_west`, `right_to_left_backoffice`, `diagonal_corner_suite`, `multi_floor_riser`, `three_switch_wings`, `server_cage_and_user_pod`, `linear_warehouse_bays`, `u_shaped_courtyard`, and `rooftop_diagonal_cascade`.
+- **🔍 Interactive Scrollable & Zoomable Topology Diagram + Popup Diagnostic Console**:
+  - Mouse-wheel zoom (`Zoom In` / `Zoom Out` / `Reset 100%`), left-click drag panning, and scrollbars on the Visual Topology Diagram.
+  - Dedicated popup window (`💡 Diagnostic Console & Solution Reveal`) placed right next to `🔄 Quick-Check Current .pkt` so the Network Blueprint occupies the full workspace width.
+- **🧱 Modular Package Architecture**:
+  - Clean separation across `career.py`, `layouts.py`, `faults_level1.py`, `settings.py`, `verifier.py`, and `pkt_generator/game/ui/` (`constants.py`, `stats_pane.py`, `topology_canvas.py`, `diagnostic_popup.py`).
 
 ---
 
@@ -12,14 +31,14 @@ Launch the desktop NOC console (100% Python standard library + `tkinter`):
 python play_game.py
 ```
 
-### Key Features
-- **Mission Mode 1: Break/Fix Troubleshooting**:
-  - Generates randomized `.pkt` challenge files with realistic **CCNA v2.0 (200-301)** faults across Layer 1 (physical power, missing patch cables, disabled NICs, speed/duplex mismatches, wrong router uplink port), Layer 2 (administratively down ports, broken switch `Vlan1` management SVI), Layer 3 (wrong subnet IP, wrong default gateway, restrictive subnet mask, duplicate IP conflicts, router/server IP typos), and Network Services (DHCP/APIPA `169.254.x.x` fallback, wrong DNS server).
-  - **6 Real-World Floorplan & Topology Archetypes**: Left-to-Right Enterprise Demarc Flow, Two-Closet MDF + IDF Floorplan (2 Switches), Central Wiring Closet Radial Star, Bottom Fiber Demarc + East/West Split Wings, Right-to-Left Back-Office & Desk Pods, and L-Shaped Corner Suite Floorplan.
-  - **Randomized Subnets & Hardware**: Supports `/24`, `/25`, `/26`, and `/27` subnets across `10.x.y.z`, `172.16–31.y.z`, and `192.168.y.z`, alternating between first-usable and last-usable gateway conventions, variable host counts (`PC-PT` + `Laptop-PT`), and multiple router models (`2911`, `1941`, `2901`).
-  - **Offline `.pkt` Inspector & Verifier**: Save your fixed `.pkt` in Cisco Packet Tracer (`Ctrl+S`) and click **Upload & Inspect .pkt** (or **Quick-Check Current Challenge .pkt**) to grade your fix, get 3-step progressive hints, or click **Reveal What Was Wrong** for exact IOS CLI / GUI remediation steps.
-- **Mission Mode 2: Build Network from Scratch** *(UI setup ready)*:
-  - Designed for greenfield network deployment work orders with configurable Subnet Assistance (`Guided`, `Standard FLSM`, `Hard VLSM`) and Starter `.pkt` templates (`Pre-Placed Unconfigured Devices` or `Blank Canvas`).
+### Game Modes
+1. **🏆 Career Mode: NOC Progression (Lvl 1–50)**:
+   - Dispatches randomized fault-finding and network setup `.pkt` work orders scaled to your current level, tracks SLA resolution speed, awards XP, and unlocks 11 Milestone Titles.
+2. **🔧 Mode 1: Break/Fix Troubleshooting**:
+   - Practice mode allowing you to filter for any of the **16 Level 1 CCNA v2.0 faults** (or random combinations) across Layer 1 (physical power, missing patch cables, disabled NICs, speed/duplex mismatches, wrong router uplink port), Layer 2 (administratively down ports, broken switch `Vlan1` management SVI), Layer 3 (wrong subnet IP, wrong default gateway, restrictive subnet mask, duplicate IP conflicts, router/server IP typos), and Network Services (DHCP/APIPA `169.254.x.x` fallback, wrong DNS server).
+   - Also includes UI presets for **Level 2 Switching, VLANs, 802.1Q Trunks, Router-on-a-Stick & EtherChannel**.
+3. **🏗️ Mode 2: Build Network from Scratch** *(UI setup ready)*:
+   - Designed for greenfield network deployment work orders with configurable Addressing Help and Hardware Cabling states.
 
 ---
 
@@ -146,4 +165,3 @@ net.save("output/intervlan.pkt")
 | `"firewall"` | `5505` | — |
 | `"cloud"` | `Cloud-PT` | — |
 | `"phone"` | `7960` | — |
-

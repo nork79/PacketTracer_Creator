@@ -11,6 +11,7 @@ from pkt_generator.game.models import (
     FaultRecord,
     VerificationResult,
 )
+from pkt_generator.game.settings import GameSettings
 from pkt_generator.game.verifier import verify_pkt_file
 
 __all__ = [
@@ -19,6 +20,7 @@ __all__ = [
     "ChallengeTicket",
     "CheckItemResult",
     "FaultRecord",
+    "GameSettings",
     "VerificationResult",
     "generate_level1_challenge",
     "verify_pkt_file",

@@ -1,0 +1,52 @@
+{
+  "player_name": "Nork",
+  "company_name": "Apex Global Systems",
+  "departments": [
+    {
+      "code": "FIN",
+      "name": "Finance & Accounting"
+    },
+    {
+      "code": "ENG",
+      "name": "Engineering & R&D"
+    },
+    {
+      "code": "HR",
+      "name": "Human Resources"
+    },
+    {
+      "code": "OPS",
+      "name": "Operations & Logistics"
+    },
+    {
+      "code": "SLS",
+      "name": "Sales & Marketing"
+    },
+    {
+      "code": "SEC",
+      "name": "Security Operations (SOC)"
+    },
+    {
+      "code": "IT",
+      "name": "Corporate IT Services"
+    },
+    {
+      "code": "EXEC",
+      "name": "Executive Suite"
+    }
+  ],
+  "career": {
+    "level": 2,
+    "xp": 205,
+    "total_xp": 305,
+    "tasks_completed": 2,
+    "fault_tasks_completed": 2,
+    "setup_tasks_completed": 0,
+    "current_streak": 2,
+    "best_streak": 2,
+    "first_try_solves": 2,
+    "best_sla_seconds": 31,
+    "hints_used_total": 0,
+    "solutions_revealed_total": 0
+  }
+}

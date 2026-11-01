@@ -13,7 +13,13 @@ ROOT = Path(__file__).resolve().parent.parent
 if str(ROOT) not in sys.path:
     sys.path.insert(0, str(ROOT))
 
-from pkt_generator.game import generate_level1_challenge, verify_pkt_file  # noqa: E402
+from pkt_generator.game import GameSettings, generate_level1_challenge, verify_pkt_file  # noqa: E402
+from pkt_generator.game.career import (  # noqa: E402
+    CareerProfile,
+    award_ticket_xp,
+    roll_career_task,
+    title_for_level,
+)
 from pkt_generator.game.generator import ALL_LEVEL1_FAULT_TYPES, TOPOLOGY_ARCHETYPES  # noqa: E402
 from pkt_generator.game.gui import NetDoctorApp  # noqa: E402
 from pkt_generator.network import decode_bytes, encode  # noqa: E402
@@ -136,12 +142,14 @@ class TestLevel1Game(unittest.TestCase):
         seen_prefixes: set[str] = set()
         seen_client_counts: set[int] = set()
         seen_layouts: set[str] = set()
+        seen_switch_counts: set[int] = set()
         seen_laptop = False
-        seen_two_switches = False
 
         with tempfile.TemporaryDirectory() as tmp:
-            for seed in range(1, 30):
-                ticket = generate_level1_challenge(tmp, num_faults=2, seed=seed)
+            for idx, arch in enumerate(TOPOLOGY_ARCHETYPES):
+                ticket = generate_level1_challenge(
+                    tmp, num_faults=2, seed=idx + 1, archetype=arch
+                )
                 self.assertEqual(len(ticket.faults), 2)
                 self.assertNotEqual(ticket.faults[0].fault_id, ticket.faults[1].fault_id)
                 prefix = "/" + ticket.subnet_cidr.split("/")[1]
@@ -151,35 +159,131 @@ class TestLevel1Game(unittest.TestCase):
                 seen_client_counts.add(len(client_rows))
                 if any(r.model == "Laptop-PT" for r in client_rows):
                     seen_laptop = True
-                if sum(1 for r in ticket.device_rows if r.model == "2960-24TT") == 2:
-                    seen_two_switches = True
+                seen_switch_counts.add(
+                    sum(1 for r in ticket.device_rows if r.model == "2960-24TT")
+                )
 
                 res = verify_pkt_file(ticket.pkt_path, ticket)
                 self.assertFalse(res.all_passed)
                 self.assertEqual(res.total_count, 2)
 
+            # A few extra seeds to guarantee all 4 prefix lengths and laptop appear
+            for seed in range(13, 25):
+                ticket = generate_level1_challenge(tmp, num_faults=2, seed=seed)
+                seen_prefixes.add("/" + ticket.subnet_cidr.split("/")[1])
+                client_rows = [r for r in ticket.device_rows if r.model in ("PC-PT", "Laptop-PT")]
+                seen_client_counts.add(len(client_rows))
+                if any(r.model == "Laptop-PT" for r in client_rows):
+                    seen_laptop = True
+
+        self.assertEqual(len(TOPOLOGY_ARCHETYPES), 12)
+        self.assertEqual(len(seen_layouts), 12)
+        self.assertEqual(seen_switch_counts, {1, 2, 3})
         self.assertEqual(seen_prefixes, {"/24", "/25", "/26", "/27"})
         self.assertEqual(seen_client_counts, {2, 3, 4})
-        self.assertEqual(len(seen_layouts), len(TOPOLOGY_ARCHETYPES))
         self.assertTrue(seen_laptop)
-        self.assertTrue(seen_two_switches)
 
     def test_tkinter_gui_initialization_and_actions(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:
+            settings_file = Path(tmp) / "test_settings.json"
             root = tk.Tk()
             root.withdraw()
             try:
-                app = NetDoctorApp(root, challenges_dir=tmp)
+                app = NetDoctorApp(root, challenges_dir=tmp, settings_path=settings_file)
                 self.assertIsNotNone(app.current_ticket)
                 assert app.current_ticket is not None
                 self.assertTrue(app.current_ticket.pkt_path.is_file())
 
                 app.quick_check_current_pkt()
+                app.open_diagnostic_popup()
                 app.show_next_hint()
                 app.show_next_hint()
                 app.reveal_what_was_wrong()
+                app._zoom_topology(1.15)
+                app._zoom_topology(1 / 1.15)
+                app._reset_topology_zoom()
+
+                app.settings.career.level = 12
+                app.settings.career.total_xp = 4500
+                app.settings.career.tasks_completed = 18
+                app.reset_career_progress()
+                self.assertEqual(app.settings.career.level, 1)
+                self.assertEqual(app.settings.career.total_xp, 0)
+                self.assertEqual(app.settings.career.tasks_completed, 0)
             finally:
                 root.destroy()
+
+    def test_career_mode_progression_and_stats_pane(self) -> None:
+        profile = CareerProfile()
+        self.assertEqual(profile.level, 1)
+        self.assertEqual(profile.title, "NOC Trainee")
+
+        # Level 1 Gold SLA first-try solve should award >100 XP and level up to Level 2
+        reward1 = award_ticket_xp(
+            profile,
+            task_kind="fault",
+            num_faults=1,
+            num_switches=1,
+            prefix_len=24,
+            elapsed_seconds=45,
+            target_sla_seconds=180,
+            hints_used=0,
+            failed_attempts=0,
+            solution_revealed=False,
+        )
+        self.assertTrue(reward1.leveled_up)
+        self.assertEqual(profile.level, 2)
+        self.assertEqual(profile.tasks_completed, 1)
+        self.assertEqual(profile.fault_tasks_completed, 1)
+        self.assertEqual(profile.first_try_solves, 1)
+        self.assertEqual(profile.best_sla_seconds, 45)
+        self.assertEqual(reward1.speed_multiplier, 1.5)
+
+        # Verify setup task award and milestone title at Level 5 and Level 50
+        self.assertEqual(title_for_level(5), "Junior Helpdesk Technician")
+        self.assertEqual(title_for_level(20), "Associate Network Engineer (CCNA)")
+        self.assertEqual(title_for_level(50), "Distinguished Fellow of the NOC")
+
+        # Verify task director rolls both fault and setup tasks across levels 1..50
+        spec_low = roll_career_task(1)
+        spec_high = roll_career_task(45)
+        self.assertEqual(spec_low.num_faults, 1)
+        self.assertGreaterEqual(spec_high.num_faults, 3)
+
+        with tempfile.TemporaryDirectory() as tmp:
+            setup_ticket = generate_level1_challenge(
+                tmp,
+                num_faults=3,
+                seed=99,
+                task_kind="setup",
+            )
+            self.assertIn("[NETWORK SETUP]", setup_ticket.scenario_title)
+            self.assertEqual(len(setup_ticket.faults), 3)
+            res = verify_pkt_file(setup_ticket.pkt_path, setup_ticket)
+            self.assertFalse(res.all_passed)
+            self.assertEqual(res.total_count, 3)
+
+    def test_custom_game_settings_file(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            settings_file = Path(tmp) / "custom_settings.json"
+            custom = GameSettings(
+                player_name="Alice",
+                company_name="CyberDyne Corp",
+                departments=[("RND", "Robotics Research")],
+                settings_path=settings_file,
+            )
+            custom.save(settings_file)
+
+            loaded = GameSettings.load(settings_file)
+            self.assertEqual(loaded.player_name, "Alice")
+            self.assertEqual(loaded.company_name, "CyberDyne Corp")
+            self.assertEqual(loaded.departments, [("RND", "Robotics Research")])
+
+            ticket = generate_level1_challenge(tmp, seed=7, settings=loaded)
+            self.assertIn("CyberDyne Corp", ticket.scenario_title)
+            self.assertIn("Robotics Research", ticket.scenario_title)
+            self.assertTrue(any("Alice" in n for n in ticket.service_notes))
+            self.assertEqual(ticket.device_rows[0].device, "RND-R1")
 
 
 if __name__ == "__main__":
