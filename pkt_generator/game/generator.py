@@ -14,6 +14,11 @@ from pkt_generator.game.faults_level1 import (
     inject_level1_fault,
     select_compatible_faults,
 )
+from pkt_generator.game.faults_level2 import ALL_LEVEL2_FAULT_TYPES
+from pkt_generator.game.generator_level2 import (
+    generate_build_mission,
+    generate_level2_challenge,
+)
 from pkt_generator.game.layouts import (
     TOPOLOGY_ARCHETYPES,
     build_layout_positions,
@@ -30,8 +35,11 @@ from pkt_generator.network import SimpleNetwork, encode
 
 __all__ = [
     "ALL_LEVEL1_FAULT_TYPES",
+    "ALL_LEVEL2_FAULT_TYPES",
     "TOPOLOGY_ARCHETYPES",
+    "generate_build_mission",
     "generate_level1_challenge",
+    "generate_level2_challenge",
 ]
 
 

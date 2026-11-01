@@ -13,15 +13,24 @@ ROOT = Path(__file__).resolve().parent.parent
 if str(ROOT) not in sys.path:
     sys.path.insert(0, str(ROOT))
 
-from pkt_generator.game import GameSettings, generate_level1_challenge, verify_pkt_file  # noqa: E402
+from pkt_generator.game import (  # noqa: E402
+    ALL_LEVEL1_FAULT_TYPES,
+    ALL_LEVEL2_FAULT_TYPES,
+    GameSettings,
+    generate_build_mission,
+    generate_level1_challenge,
+    generate_level2_challenge,
+    verify_pkt_file,
+)
 from pkt_generator.game.career import (  # noqa: E402
     CareerProfile,
     award_ticket_xp,
     roll_career_task,
     title_for_level,
 )
-from pkt_generator.game.generator import ALL_LEVEL1_FAULT_TYPES, TOPOLOGY_ARCHETYPES  # noqa: E402
+from pkt_generator.game.generator import TOPOLOGY_ARCHETYPES  # noqa: E402
 from pkt_generator.game.gui import NetDoctorApp  # noqa: E402
+from pkt_generator.game.ui import BUILD_LEVEL_OPTIONS, MISSION_MODES, TROUBLESHOOT_LEVEL_OPTIONS  # noqa: E402
 from pkt_generator.network import decode_bytes, encode  # noqa: E402
 
 
@@ -202,8 +211,196 @@ class TestLevel1Game(unittest.TestCase):
                 app._zoom_topology(1.15)
                 app._zoom_topology(1 / 1.15)
                 app._reset_topology_zoom()
+
+                # Switch to Level 2 Troubleshooting in GUI and generate challenge
+                app.level_var.set(TROUBLESHOOT_LEVEL_OPTIONS[1])
+                app._on_troubleshoot_level_changed()
+                app.generate_new_challenge()
+                assert app.current_ticket is not None
+                self.assertEqual(app.current_ticket.level, 2)
+                self.assertTrue(app.current_ticket.pkt_path.is_file())
+                app.quick_check_current_pkt()
+
+                # Switch to Mode 2 (Build Network from Scratch) Level 1 & Level 2
+                app.mission_mode_var.set(MISSION_MODES[1])
+                app.build_level_var.set(BUILD_LEVEL_OPTIONS[0])
+                app.generate_new_challenge()
+                assert app.current_ticket is not None
+                self.assertEqual(app.current_ticket.level, 1)
+                self.assertIn("[BUILD LVL 1]", app.current_ticket.scenario_title)
+                app.quick_check_current_pkt()
+
+                app.build_level_var.set(BUILD_LEVEL_OPTIONS[1])
+                app.generate_new_challenge()
+                assert app.current_ticket is not None
+                self.assertEqual(app.current_ticket.level, 2)
+                self.assertIn("[BUILD LVL 2]", app.current_ticket.scenario_title)
+                app.quick_check_current_pkt()
             finally:
                 root.destroy()
+
+    def test_all_12_level2_fault_types_detect_and_verify_when_fixed(self) -> None:
+        self.assertEqual(len(ALL_LEVEL2_FAULT_TYPES), 12)
+        with tempfile.TemporaryDirectory() as tmp:
+            for fcode in ALL_LEVEL2_FAULT_TYPES:
+                with self.subTest(level2_fault=fcode):
+                    ticket = generate_level2_challenge(
+                        tmp, num_faults=1, seed=42, fault_types=[fcode]
+                    )
+                    self.assertTrue(ticket.pkt_path.is_file())
+                    self.assertEqual(ticket.level, 2)
+                    self.assertEqual(len(ticket.faults), 1)
+
+                    # 1. Verify freshly generated faulty Level 2 .pkt fails verification
+                    res_broken = verify_pkt_file(ticket.pkt_path, ticket)
+                    self.assertFalse(
+                        res_broken.all_passed,
+                        f"Expected broken Level 2 .pkt for {fcode} to fail verification",
+                    )
+                    self.assertEqual(res_broken.passed_count, 0)
+
+                    # 2. Repair the Level 2 fault in .pkt XML, re-encode, and verify it passes!
+                    raw = ticket.pkt_path.read_bytes()
+                    root = ET.fromstring(decode_bytes(raw, "pkt").xml)
+                    spec = ticket.faults[0].verify_spec
+                    devs_by_name = {
+                        (d.findtext("ENGINE/NAME") or "").strip(): d
+                        for d in root.findall(".//NETWORK/DEVICES/DEVICE")
+                    }
+                    d = devs_by_name[spec["device"]]
+                    rc = d.find("ENGINE/RUNNINGCONFIG")
+                    assert rc is not None
+
+                    if fcode == "access_port_wrong_vlan":
+                        cur_if = ""
+                        for line_el in rc.findall("LINE"):
+                            txt = (line_el.text or "").strip()
+                            if txt.startswith("interface "):
+                                cur_if = txt.split(None, 1)[1]
+                            elif cur_if == spec["interface"] and txt.startswith("switchport access vlan "):
+                                line_el.text = f" switchport access vlan {spec['expected_vlan']}"
+                    elif fcode == "vlan_missing_from_db":
+                        vlans_el = d.find("ENGINE/VLANS")
+                        assert vlans_el is not None
+                        ET.SubElement(vlans_el, "VLAN", number=str(spec["expected_vlan"]), name="RESTORED")
+                    elif fcode == "voice_vlan_mismatch":
+                        cur_if = ""
+                        for line_el in rc.findall("LINE"):
+                            txt = (line_el.text or "").strip()
+                            if txt.startswith("interface "):
+                                cur_if = txt.split(None, 1)[1]
+                            elif cur_if == spec["interface"] and txt.startswith("switchport access vlan "):
+                                line_el.text = f" switchport access vlan {spec['expected_data_vlan']}"
+                        # Append voice vlan command inside the interface stanza
+                        lines = list(rc.findall("LINE"))
+                        for i, line_el in enumerate(lines):
+                            if (line_el.text or "").strip() == f"interface {spec['interface']}":
+                                new_el = ET.Element("LINE")
+                                new_el.text = f" switchport voice vlan {spec['expected_voice_vlan']}"
+                                rc.insert(i + 2, new_el)
+                                break
+                    elif fcode in ("trunk_left_as_access", "roas_switch_uplink_not_trunk"):
+                        cur_if = ""
+                        for line_el in rc.findall("LINE"):
+                            txt = (line_el.text or "").strip()
+                            if txt.startswith("interface "):
+                                cur_if = txt.split(None, 1)[1]
+                            elif cur_if == spec["interface"] and txt.startswith("switchport mode "):
+                                line_el.text = " switchport mode trunk"
+                    elif fcode == "trunk_allowed_vlan_missing":
+                        cur_if = ""
+                        vlist = ",".join(str(v) for v in spec["required_vlans"])
+                        for line_el in rc.findall("LINE"):
+                            txt = (line_el.text or "").strip()
+                            if txt.startswith("interface "):
+                                cur_if = txt.split(None, 1)[1]
+                            elif cur_if == spec["interface"] and txt.startswith("switchport trunk allowed vlan "):
+                                line_el.text = f" switchport trunk allowed vlan {vlist}"
+                    elif fcode == "trunk_native_vlan_mismatch":
+                        cur_if = ""
+                        for line_el in rc.findall("LINE"):
+                            txt = (line_el.text or "").strip()
+                            if txt.startswith("interface "):
+                                cur_if = txt.split(None, 1)[1]
+                            elif cur_if == spec["interface"] and txt.startswith("switchport trunk native vlan "):
+                                line_el.text = " no switchport trunk native vlan"
+                    elif fcode == "dtp_mode_mismatch":
+                        for line_el in rc.findall("LINE"):
+                            if (line_el.text or "").strip() == "switchport mode dynamic auto":
+                                line_el.text = " switchport mode trunk"
+                    elif fcode == "roas_wrong_dot1q_tag":
+                        sub_if = f"{spec['parent_port']}.{spec['vlan_id']}"
+                        cur_if = ""
+                        for line_el in rc.findall("LINE"):
+                            txt = (line_el.text or "").strip()
+                            if txt.startswith("interface "):
+                                cur_if = txt.split(None, 1)[1]
+                            elif cur_if == sub_if and txt.startswith("encapsulation dot1Q "):
+                                line_el.text = f" encapsulation dot1Q {spec['vlan_id']}"
+                    elif fcode == "roas_subif_wrong_ip":
+                        sub_if = f"{spec['parent_port']}.{spec['vlan_id']}"
+                        cur_if = ""
+                        for line_el in rc.findall("LINE"):
+                            txt = (line_el.text or "").strip()
+                            if txt.startswith("interface "):
+                                cur_if = txt.split(None, 1)[1]
+                            elif cur_if == sub_if and txt.startswith("ip address "):
+                                line_el.text = f" ip address {spec['expected_ip']} {spec['expected_mask']}"
+                    elif fcode == "roas_parent_port_shutdown":
+                        cur_if = ""
+                        for line_el in rc.findall("LINE"):
+                            txt = (line_el.text or "").strip()
+                            if txt.startswith("interface "):
+                                cur_if = txt.split(None, 1)[1]
+                            elif cur_if == spec["parent_port"] and txt == "shutdown":
+                                line_el.text = " no shutdown"
+                    elif fcode == "etherchannel_mode_mismatch":
+                        for line_el in rc.findall("LINE"):
+                            if (line_el.text or "").strip().startswith("channel-group 1 mode "):
+                                line_el.text = " channel-group 1 mode active"
+
+                    fixed_pkt = Path(tmp) / f"fixed_l2_{fcode}.pkt"
+                    encode(
+                        str(fixed_pkt),
+                        ET.tostring(root, encoding="unicode").encode("utf-8"),
+                        "pkt",
+                    )
+
+                    res_fixed = verify_pkt_file(fixed_pkt, ticket)
+                    self.assertTrue(
+                        res_fixed.all_passed,
+                        f"Expected fixed Level 2 .pkt for {fcode} to pass: {res_fixed.items}",
+                    )
+
+    def test_mode2_build_missions_level1_and_level2(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            # Level 1 Build Mission (Uncabled + Subnetting Challenge)
+            b1 = generate_build_mission(
+                tmp,
+                level=1,
+                addressing_help="🧮 Subnetting Challenge (CIDR Block & Rules Only)",
+                cabling_mode="🔌 Uncabled Hardware (Wire from Scratch)",
+                seed=11,
+            )
+            self.assertEqual(b1.level, 1)
+            self.assertEqual(len(b1.faults), 4)
+            res_b1 = verify_pkt_file(b1.pkt_path, b1)
+            self.assertFalse(res_b1.all_passed)
+            self.assertEqual(res_b1.passed_count, 0)
+
+            # Level 2 Build Mission (Pre-Cabled + Guided)
+            b2 = generate_build_mission(
+                tmp,
+                level=2,
+                addressing_help="📘 Guided (Full IPv4 Table Provided)",
+                cabling_mode="🔗 Pre-Cabled Hardware (Focus on CLI / IPs)",
+                seed=22,
+            )
+            self.assertEqual(b2.level, 2)
+            self.assertEqual(len(b2.faults), 4)
+            res_b2 = verify_pkt_file(b2.pkt_path, b2)
+            self.assertFalse(res_b2.all_passed)
+            self.assertEqual(res_b2.passed_count, 0)
 
     def test_career_mode_progression_and_stats_pane(self) -> None:
         profile = CareerProfile()

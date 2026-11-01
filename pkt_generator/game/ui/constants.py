@@ -18,9 +18,6 @@ TROUBLESHOOT_LEVEL_OPTIONS: list[str] = [
 BUILD_LEVEL_OPTIONS: list[str] = [
     "Level 1: Branch LAN Bring-Up (Single LAN)",
     "Level 2: Dual-Subnet FLSM, VLANs & 802.1Q RoaS",
-    "Level 3: Multi-VLAN Campus, EtherChannel & IOS DHCP",
-    "Level 4: Multi-Site WAN, VLSM & OSPFv2 Routing",
-    "Level 5: Enterprise Core (LACP / L3 Switch / NAT / ACLs)",
 ]
 
 ADDRESSING_HELP_OPTIONS: list[str] = [

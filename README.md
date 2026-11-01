@@ -5,17 +5,33 @@ Generate valid, pre-configured Cisco Packet Tracer (`.pkt`) network files offlin
 ---
 
 ## 🚀 What's New in Version 1.2
-- **🖥️ Streamlined Full-Width NOC Interface**:
-  - Removed Career Mode and the right-side stats HUD from the active interface so the **Network Blueprint & Expected Addressing** and **Interactive Visual Topology Diagram** occupy the full workspace width.
+- **✅ Level 2 Troubleshooting — Fully Implemented (12 CCNA v2.0 Faults)**:
+  - Multi-switch (MDF/IDF, 2–3 switches) dual-VLAN campus topologies routed via **Router-on-a-Stick (802.1Q)**, with 1–4 simultaneous faults:
+    - **VLANs:** access port in wrong VLAN, VLAN missing from switch database, Voice/Data VLAN misconfiguration.
+    - **802.1Q Trunks & DTP:** uplink left in access mode, allowed-VLAN list pruning, native VLAN mismatch, DTP `dynamic auto` / `dynamic auto` failure.
+    - **Router-on-a-Stick:** wrong `encapsulation dot1Q` tag, wrong subinterface IP, parent interface shutdown, switch uplink not trunking.
+    - **EtherChannel:** LACP `active` vs PAgP `desirable` mismatch on `Port-channel1`.
+- **✅ Mode 2: Build Network from Scratch — Fully Implemented (Level 1 & Level 2)**:
+  - **Level 1 — Branch LAN Bring-Up:** cabling → router gateway → switch `Vlan1` SVI + default-gateway → endpoint addressing.
+  - **Level 2 — Dual-Subnet VLANs & 802.1Q RoaS:** cabling → RoaS subinterfaces → MDF/IDF switch VLANs, access ports & trunks → multi-VLAN host addressing.
+  - Choose **📘 Guided** (exact IPs) or **🧮 Subnetting Challenge** (rules only), and **🔌 Uncabled** or **🔗 Pre-Cabled** hardware. Each stage is verified independently.
+- **🖥️ Split-Screen NOC Workspace**:
+  - The **Intended Network Specification** (Addressing, Cabling & Ports, Visual Topology) now fills the **right-hand side** of the screen, with ticket details, symptoms and actions in a narrower left column. Drag the divider to resize; tables have scrollbars.
+- **🧹 Removed / Replaced**:
+  - **Removed:** Career Mode and the right-side Player Stats / XP HUD (including the Reset Career button) are no longer part of the interface.
+  - **Removed:** Unimplemented Mode 2 Levels 3–5 placeholders from the difficulty dropdown.
+  - **Replaced:** "Backend implementation pending" placeholders for Level 2 and Mode 2 are replaced by working generators and verifiers.
+  - **Changed:** Fault Count now supports 1–4 simultaneous faults (was 1–2).
 - **🏢 Customizable Player, Company & Department Settings (`game_settings.json`)**:
   - Configure `player_name`, `company_name`, and internal `departments` (with prefix codes like `FIN-R1`, `ENG-SW1`, `SEC-SRV1`) in [`game_settings.json`](game_settings.json); changes reload live on every new task.
 - **🗺️ 12 Real-World Physical Floorplan Archetypes (1, 2 & 3 Switches)**:
   - Includes `left_to_right_pipeline`, `mdf_idf_two_closet`, `radial_star_office`, `split_wing_east_west`, `right_to_left_backoffice`, `diagonal_corner_suite`, `multi_floor_riser`, `three_switch_wings`, `server_cage_and_user_pod`, `linear_warehouse_bays`, `u_shaped_courtyard`, and `rooftop_diagonal_cascade`.
 - **🔍 Interactive Scrollable & Zoomable Topology Diagram + Popup Diagnostic Console**:
   - Mouse-wheel zoom (`Zoom In` / `Zoom Out` / `Reset 100%`), left-click drag panning, and scrollbars on the Visual Topology Diagram.
-  - Dedicated popup window (`💡 Diagnostic Console & Solution Reveal`) placed right next to `🔄 Quick-Check Current .pkt` so the Network Blueprint occupies the full workspace width.
+  - Popup window (`💡 Diagnostic Console & Solution Reveal`) with progressive hints and full solution reveal.
 - **🧱 Modular Package Architecture**:
-  - Clean separation across `layouts.py`, `faults_level1.py`, `settings.py`, `verifier.py`, and `pkt_generator/game/ui/` (`constants.py`, `topology_canvas.py`, `diagnostic_popup.py`).
+  - `pkt_generator/game/`: `generator.py` (Level 1), `generator_level2.py` (Level 2 + Mode 2 builds), `faults_level1.py`, `faults_level2.py`, `layouts.py`, `settings.py`, `verifier.py`, and `ui/` (`constants.py`, `topology_canvas.py`, `diagnostic_popup.py`).
+  - `SimpleNetwork` now supports voice VLANs, native VLANs, explicit switchport modes (incl. DTP), EtherChannel `channel-group`, custom `dot1Q` tags and shutdown subinterfaces.
 
 ---
 
@@ -29,10 +45,16 @@ python play_game.py
 
 ### Game Modes
 1. **🔧 Mode 1: Break/Fix Troubleshooting**:
-   - Practice mode allowing you to filter for any of the **16 Level 1 CCNA v2.0 faults** (or random combinations) across Layer 1 (physical power, missing patch cables, disabled NICs, speed/duplex mismatches, wrong router uplink port), Layer 2 (administratively down ports, broken switch `Vlan1` management SVI), Layer 3 (wrong subnet IP, wrong default gateway, restrictive subnet mask, duplicate IP conflicts, router/server IP typos), and Network Services (DHCP/APIPA `169.254.x.x` fallback, wrong DNS server).
-   - Also includes UI presets for **Level 2 Switching, VLANs, 802.1Q Trunks, Router-on-a-Stick & EtherChannel**.
-2. **🏗️ Mode 2: Build Network from Scratch** *(UI setup ready)*:
-   - Designed for greenfield network deployment work orders with configurable Addressing Help and Hardware Cabling states.
+   - **Level 1 — Tier 1 Helpdesk (Single LAN):** filter for any of the **16 Level 1 CCNA v2.0 faults** (or random combinations) across Layer 1 (physical power, missing patch cables, disabled NICs, speed/duplex mismatches, wrong router uplink port), Layer 2 (administratively down ports, broken switch `Vlan1` management SVI), Layer 3 (wrong subnet IP, wrong default gateway, restrictive subnet mask, duplicate IP conflicts, router/server IP typos), and Network Services (DHCP/APIPA `169.254.x.x` fallback, wrong DNS server).
+   - **Level 2 — Switching, VLANs, 802.1Q Trunks & RoaS:** filter for any of the **12 Level 2 CCNA v2.0 faults** (VLANs, trunks, DTP, Router-on-a-Stick, EtherChannel) on multi-switch dual-VLAN topologies.
+2. **🏗️ Mode 2: Build Network from Scratch**:
+   - **Level 1 — Branch LAN Bring-Up** and **Level 2 — Dual-Subnet VLANs & 802.1Q RoaS** greenfield work orders, with configurable Addressing Help and Hardware Cabling states and staged commissioning checks.
+
+### Workflow
+1. Click **⚡ Generate New .pkt Challenge** and open the file with **🚀 Open .pkt in Packet Tracer**.
+2. Compare Packet Tracer against the **Intended Network Specification** on the right.
+3. Fix or build the network, save in Packet Tracer (`Ctrl+S`), then click **🔄 Quick-Check Current .pkt** or **📤 Upload & Inspect .pkt File...**.
+4. Stuck? Open **💡 Diagnostic Console & Solution Reveal** for progressive hints.
 
 ---
 

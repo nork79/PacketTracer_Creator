@@ -69,6 +69,8 @@ class SubinterfaceSpec:
     netmask: str
     native: bool = False
     description: str | None = None
+    dot1q_tag: int | None = None
+    shutdown: bool = False
 
 
 @dataclass
@@ -110,6 +112,10 @@ class PortConfig:
     trunk: bool = False
     allowed_vlans: list[int] | None = None
     access_vlan: int | None = None
+    voice_vlan: int | None = None
+    native_vlan: int | None = None
+    switchport_mode: str | None = None
+    channel_group: tuple[int, str] | None = None
     clock_rate: int | None = None
     description: str | None = None
 
@@ -934,6 +940,7 @@ class SimpleNetwork:
                     and peer.capability.category in ("switch", "l3_switch")
                     and not pcfg.routed
                     and pcfg.access_vlan is None
+                    and pcfg.switchport_mode is None
                 ):
                     if any(v != 1 for v in dev.vlans) or any(
                         v != 1 for v in peer.vlans
@@ -989,6 +996,7 @@ class SimpleNetwork:
             lines.extend([f"vlan {vid}", f" name {vspec.name}", "!"])
 
         # Physical interfaces (in deterministic order)
+        port_channels: dict[int, bool] = {}
         for port_name in sorted(dev.ports):
             pcfg = dev.ports[port_name]
             lines.append(f"interface {port_name}")
@@ -1004,15 +1012,32 @@ class SimpleNetwork:
                 if pcfg.trunk:
                     if dev.capability.category == "l3_switch":
                         lines.append(" switchport trunk encapsulation dot1q")
-                    lines.append(" switchport mode trunk")
+                    lines.append(f" switchport mode {pcfg.switchport_mode or 'trunk'}")
+                    if pcfg.native_vlan and pcfg.native_vlan != 1:
+                        lines.append(f" switchport trunk native vlan {pcfg.native_vlan}")
                     if pcfg.allowed_vlans:
                         vlist = ",".join(str(v) for v in sorted(pcfg.allowed_vlans))
                         lines.append(f" switchport trunk allowed vlan {vlist}")
                 else:
-                    lines.append(" switchport mode access")
+                    lines.append(f" switchport mode {pcfg.switchport_mode or 'access'}")
                     if pcfg.access_vlan and pcfg.access_vlan != 1:
                         lines.append(f" switchport access vlan {pcfg.access_vlan}")
+                    if pcfg.voice_vlan:
+                        lines.append(f" switchport voice vlan {pcfg.voice_vlan}")
+                if pcfg.channel_group:
+                    grp_num, grp_mode = pcfg.channel_group
+                    lines.append(f" channel-group {grp_num} mode {grp_mode}")
+                    port_channels[grp_num] = port_channels.get(grp_num, False) or pcfg.trunk
             lines.append(" shutdown" if pcfg.shutdown else " no shutdown")
+            lines.append("!")
+
+        for grp_num in sorted(port_channels):
+            lines.append(f"interface Port-channel{grp_num}")
+            if port_channels[grp_num]:
+                lines.append(" switchport mode trunk")
+            else:
+                lines.append(" switchport mode access")
+            lines.append(" no shutdown")
             lines.append("!")
 
         # Router-on-a-stick subinterfaces
@@ -1021,9 +1046,10 @@ class SimpleNetwork:
             if sub.description:
                 lines.append(f" description {sub.description}")
             native_kw = " native" if sub.native else ""
-            lines.append(f" encapsulation dot1Q {sub.vlan_id}{native_kw}")
+            tag = sub.dot1q_tag if sub.dot1q_tag is not None else sub.vlan_id
+            lines.append(f" encapsulation dot1Q {tag}{native_kw}")
             lines.append(f" ip address {sub.ip} {sub.netmask}")
-            lines.append(" no shutdown")
+            lines.append(" shutdown" if sub.shutdown else " no shutdown")
             lines.append("!")
 
         # Switch SVIs (Vlan1 management IP and any VLAN SVIs)

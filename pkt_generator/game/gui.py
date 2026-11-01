@@ -10,7 +10,11 @@ import sys
 import tkinter as tk
 from tkinter import filedialog, messagebox, ttk
 
-from pkt_generator.game.generator import generate_level1_challenge
+from pkt_generator.game.generator import (
+    generate_build_mission,
+    generate_level1_challenge,
+    generate_level2_challenge,
+)
 from pkt_generator.game.models import ChallengeTicket
 from pkt_generator.game.settings import GameSettings
 from pkt_generator.game.ui import (
@@ -39,8 +43,8 @@ class NetDoctorApp:
     ) -> None:
         self.root = root
         self.root.title("NetDoctor NOC — Packet Tracer Troubleshooting Game")
-        self.root.geometry("1320x820")
-        self.root.minsize(1080, 700)
+        self.root.geometry("1440x860")
+        self.root.minsize(1100, 700)
         self.root.configure(bg="#0f172a")
 
         self.challenges_dir = (
@@ -188,7 +192,7 @@ class NetDoctorApp:
         fault_spin = ttk.Spinbox(
             self.mode1_ctrl_frame,
             from_=1,
-            to=2,
+            to=4,
             textvariable=self.num_faults_var,
             width=4,
             state="readonly",
@@ -285,7 +289,7 @@ class NetDoctorApp:
         )
         self.score_label.pack(side="left")
 
-        # ---------------- Main Workspace Frame (Full Width) ----------------
+        # ---------------- Main Workspace Frame (Split: LHS Ticket | RHS Specification) ----------------
         main_frame = tk.Frame(
             self.root,
             bg="#1e293b",
@@ -304,6 +308,26 @@ class NetDoctorApp:
         )
 
     def _build_main_workspace(self, parent: tk.Frame) -> None:
+        # Resizable split: LHS = Ticket / Actions / Status, RHS = Intended Network Specification
+        self.workspace_paned = tk.PanedWindow(
+            parent,
+            orient="horizontal",
+            bg="#334155",
+            sashwidth=6,
+            sashrelief="flat",
+            bd=0,
+        )
+        self.workspace_paned.pack(fill="both", expand=True)
+
+        left = tk.Frame(self.workspace_paned, bg="#1e293b", padx=4)
+        right = tk.Frame(self.workspace_paned, bg="#1e293b", padx=10)
+        self.workspace_paned.add(left, minsize=400, width=470, stretch="never")
+        self.workspace_paned.add(right, minsize=560, stretch="always")
+
+        self._build_left_ticket_pane(left)
+        self._build_right_spec_pane(right)
+
+    def _build_left_ticket_pane(self, parent: tk.Frame) -> None:
         ticket_header = tk.Frame(parent, bg="#1e293b")
         ticket_header.pack(fill="x", pady=(0, 6))
 
@@ -314,11 +338,15 @@ class NetDoctorApp:
             fg="#38bdf8",
             font=("Segoe UI", 12, "bold"),
             anchor="w",
+            justify="left",
+            wraplength=440,
         )
         self.ticket_title_lbl.pack(fill="x")
 
         pkt_btn_bar = tk.Frame(parent, bg="#1e293b")
         pkt_btn_bar.pack(fill="x", pady=(0, 8))
+        pkt_btn_bar.columnconfigure(0, weight=1, uniform="pktbtn")
+        pkt_btn_bar.columnconfigure(1, weight=1, uniform="pktbtn")
 
         tk.Button(
             pkt_btn_bar,
@@ -333,7 +361,7 @@ class NetDoctorApp:
             pady=5,
             font=("Segoe UI", 9, "bold"),
             cursor="hand2",
-        ).pack(side="left", padx=(0, 8))
+        ).grid(row=0, column=0, sticky="ew", padx=(0, 4), pady=(0, 4))
 
         tk.Button(
             pkt_btn_bar,
@@ -348,7 +376,7 @@ class NetDoctorApp:
             pady=5,
             font=("Segoe UI", 9, "bold"),
             cursor="hand2",
-        ).pack(side="left", padx=(0, 8))
+        ).grid(row=0, column=1, sticky="ew", padx=(4, 0), pady=(0, 4))
 
         tk.Button(
             pkt_btn_bar,
@@ -363,7 +391,7 @@ class NetDoctorApp:
             pady=5,
             font=("Segoe UI", 9),
             cursor="hand2",
-        ).pack(side="left")
+        ).grid(row=1, column=0, columnspan=2, sticky="ew")
 
         symptom_box = tk.Frame(
             parent,
@@ -373,7 +401,7 @@ class NetDoctorApp:
             highlightthickness=1,
             highlightbackground="#334155",
         )
-        symptom_box.pack(fill="x", pady=(0, 8))
+        symptom_box.pack(fill="both", expand=True, pady=(0, 8))
 
         self.pkt_path_lbl = tk.Label(
             symptom_box,
@@ -382,6 +410,8 @@ class NetDoctorApp:
             fg="#94a3b8",
             font=("Consolas", 9),
             anchor="w",
+            justify="left",
+            wraplength=420,
         )
         self.pkt_path_lbl.pack(fill="x", pady=(0, 4))
 
@@ -401,10 +431,21 @@ class NetDoctorApp:
             fg="#f8fafc",
             font=("Segoe UI", 10),
             justify="left",
-            anchor="w",
-            wraplength=1150,
+            anchor="nw",
+            wraplength=420,
         )
-        self.symptom_lbl.pack(fill="x", pady=(2, 0))
+        self.symptom_lbl.pack(fill="both", expand=True, pady=(2, 0))
+
+        # Re-wrap long labels whenever the LHS pane is resized via the split sash
+        def _rewrap(event: tk.Event) -> None:
+            wrap = max(240, event.width - 30)
+            self.symptom_lbl.configure(wraplength=wrap)
+            self.pkt_path_lbl.configure(wraplength=wrap)
+            self.ticket_title_lbl.configure(wraplength=wrap + 10)
+            if hasattr(self, "status_banner"):
+                self.status_banner.configure(wraplength=wrap)
+
+        symptom_box.bind("<Configure>", _rewrap)
 
         inspect_card = tk.Frame(
             parent,
@@ -414,10 +455,12 @@ class NetDoctorApp:
             highlightthickness=1,
             highlightbackground="#334155",
         )
-        inspect_card.pack(fill="x", pady=(0, 10))
+        inspect_card.pack(fill="x", pady=(0, 4))
 
         btn_row = tk.Frame(inspect_card, bg="#0f172a")
         btn_row.pack(fill="x", pady=(0, 6))
+        btn_row.columnconfigure(0, weight=1, uniform="insbtn")
+        btn_row.columnconfigure(1, weight=1, uniform="insbtn")
 
         tk.Button(
             btn_row,
@@ -432,7 +475,7 @@ class NetDoctorApp:
             pady=5,
             font=("Segoe UI", 9, "bold"),
             cursor="hand2",
-        ).pack(side="left", padx=(0, 8))
+        ).grid(row=0, column=0, sticky="ew", padx=(0, 4), pady=(0, 4))
 
         tk.Button(
             btn_row,
@@ -447,7 +490,7 @@ class NetDoctorApp:
             pady=5,
             font=("Segoe UI", 9, "bold"),
             cursor="hand2",
-        ).pack(side="left", padx=(0, 8))
+        ).grid(row=0, column=1, sticky="ew", padx=(4, 0), pady=(0, 4))
 
         tk.Button(
             btn_row,
@@ -462,7 +505,7 @@ class NetDoctorApp:
             pady=5,
             font=("Segoe UI", 9, "bold"),
             cursor="hand2",
-        ).pack(side="left")
+        ).grid(row=1, column=0, columnspan=2, sticky="ew")
 
         self.status_banner = tk.Label(
             inspect_card,
@@ -473,17 +516,28 @@ class NetDoctorApp:
             pady=5,
             padx=8,
             anchor="w",
+            justify="left",
+            wraplength=420,
         )
         self.status_banner.pack(fill="x")
 
+    def _build_right_spec_pane(self, parent: tk.Frame) -> None:
         tk.Label(
             parent,
-            text="📋 INTENDED NETWORK SPECIFICATION (Compare Packet Tracer against this Blueprint):",
+            text="📋 INTENDED NETWORK SPECIFICATION",
             bg="#1e293b",
-            fg="#cbd5e1",
-            font=("Segoe UI", 9, "bold"),
+            fg="#38bdf8",
+            font=("Segoe UI", 13, "bold"),
             anchor="w",
-        ).pack(fill="x", pady=(0, 4))
+        ).pack(fill="x")
+        tk.Label(
+            parent,
+            text="Compare the devices in Packet Tracer against this Blueprint.",
+            bg="#1e293b",
+            fg="#94a3b8",
+            font=("Segoe UI", 9),
+            anchor="w",
+        ).pack(fill="x", pady=(0, 6))
 
         self.notebook = ttk.Notebook(parent)
         self.notebook.pack(fill="both", expand=True)
@@ -495,17 +549,17 @@ class NetDoctorApp:
         addr_cols = ("device", "model", "interface", "ip", "mask", "gateway", "dns")
         self.addr_tree = ttk.Treeview(tab_addr, columns=addr_cols, show="headings")
         for col, heading, width in (
-            ("device", "Device", 110),
-            ("model", "Model", 95),
-            ("interface", "Interface", 145),
-            ("ip", "Expected IPv4", 130),
-            ("mask", "Expected Mask", 135),
-            ("gateway", "Default Gateway", 130),
-            ("dns", "DNS Server", 120),
+            ("device", "Device", 105),
+            ("model", "Model", 80),
+            ("interface", "Interface", 150),
+            ("ip", "Expected IPv4", 120),
+            ("mask", "Expected Mask", 120),
+            ("gateway", "Default Gateway", 120),
+            ("dns", "DNS Server", 110),
         ):
             self.addr_tree.heading(col, text=heading)
-            self.addr_tree.column(col, width=width, anchor="w")
-        self.addr_tree.pack(fill="both", expand=True, padx=4, pady=4)
+            self.addr_tree.column(col, width=width, minwidth=60, anchor="w", stretch=True)
+        self._pack_tree_with_scrollbars(tab_addr, self.addr_tree)
 
         # Tab 2: Cabling & Port Map
         tab_links = tk.Frame(self.notebook, bg="#0f172a")
@@ -514,21 +568,33 @@ class NetDoctorApp:
         link_cols = ("dev_a", "port_a", "dev_b", "port_b", "cable", "mode")
         self.link_tree = ttk.Treeview(tab_links, columns=link_cols, show="headings")
         for col, heading, width in (
-            ("dev_a", "Device A", 120),
-            ("port_a", "Port A", 150),
-            ("dev_b", "Device B", 120),
-            ("port_b", "Port B", 150),
-            ("cable", "Cable Type", 170),
-            ("mode", "Mode / VLAN", 150),
+            ("dev_a", "Device A", 105),
+            ("port_a", "Port A", 135),
+            ("dev_b", "Device B", 105),
+            ("port_b", "Port B", 135),
+            ("cable", "Cable Type", 165),
+            ("mode", "Mode / VLAN", 220),
         ):
             self.link_tree.heading(col, text=heading)
-            self.link_tree.column(col, width=width, anchor="w")
-        self.link_tree.pack(fill="both", expand=True, padx=4, pady=4)
+            self.link_tree.column(col, width=width, minwidth=60, anchor="w", stretch=True)
+        self._pack_tree_with_scrollbars(tab_links, self.link_tree)
 
         # Tab 3: Visual Topology Diagram Component
         tab_canvas = tk.Frame(self.notebook, bg="#0f172a")
         self.notebook.add(tab_canvas, text=" 3. Visual Topology Diagram ")
         self.topology_view = TopologyDiagramView(tab_canvas)
+
+    @staticmethod
+    def _pack_tree_with_scrollbars(parent: tk.Frame, tree: ttk.Treeview) -> None:
+        """Place a Treeview with vertical & horizontal scrollbars filling `parent`."""
+        vsb = ttk.Scrollbar(parent, orient="vertical", command=tree.yview)
+        hsb = ttk.Scrollbar(parent, orient="horizontal", command=tree.xview)
+        tree.configure(yscrollcommand=vsb.set, xscrollcommand=hsb.set)
+        tree.grid(row=0, column=0, sticky="nsew", padx=(4, 0), pady=(4, 0))
+        vsb.grid(row=0, column=1, sticky="ns", pady=(4, 0))
+        hsb.grid(row=1, column=0, sticky="ew", padx=(4, 0))
+        parent.rowconfigure(0, weight=1)
+        parent.columnconfigure(0, weight=1)
 
     # ------------------------------------------------------------------
     # Delegated Component Helpers
@@ -586,59 +652,46 @@ class NetDoctorApp:
         mode = self.mission_mode_var.get()
 
         if mode == MISSION_MODES[1]:
-            self._clear_log()
-            self._log("=== MISSION MODE 2: BUILD NETWORK FROM SCRATCH (UI SETUP) ===", "heading")
-            self._log(f"  Selected Level     : {self.build_level_var.get()}", "warn")
-            self._log(f"  Addressing Help    : {self.addressing_help_var.get()}", "warn")
-            self._log(f"  Hardware State     : {self.cabling_mode_var.get()}", "warn")
-            self._log("")
-            self._log(
-                "Mode 2 UI controls are configured! Backend generator & 4-stage commissioning "
-                "verifier for 'Build from Scratch' missions are awaiting implementation.",
-                "muted",
+            build_lvl = 2 if "Level 2" in self.build_level_var.get() else 1
+            ticket = generate_build_mission(
+                self.challenges_dir,
+                level=build_lvl,
+                addressing_help=self.addressing_help_var.get(),
+                cabling_mode=self.cabling_mode_var.get(),
+                settings=self.settings,
             )
-            self.status_banner.configure(
-                text="STATUS: Mode 2 Setup Selected (Backend implementation pending)",
-                bg="#1e293b",
-                fg="#38bdf8",
+        elif self.level_var.get() == TROUBLESHOOT_LEVEL_OPTIONS[1]:
+            selected_label = self.fault_filter_var.get()
+            chosen_code: str | None = None
+            for label, code in LEVEL2_FAULT_FILTER_OPTIONS:
+                if label == selected_label:
+                    chosen_code = code
+                    break
+            fault_types = [chosen_code] if chosen_code else None
+            num_faults = int(self.num_faults_var.get())
+            ticket = generate_level2_challenge(
+                self.challenges_dir,
+                num_faults=num_faults,
+                fault_types=fault_types,
+                settings=self.settings,
             )
-            return
+        else:
+            selected_label = self.fault_filter_var.get()
+            chosen_code = None
+            for label, code in FAULT_FILTER_OPTIONS:
+                if label == selected_label:
+                    chosen_code = code
+                    break
 
-        if self.level_var.get() == TROUBLESHOOT_LEVEL_OPTIONS[1]:
-            self._clear_log()
-            self._log("=== LEVEL 2 TROUBLESHOOTING (UI SETUP) ===", "heading")
-            self._log(f"  Selected Difficulty : {self.level_var.get()}", "warn")
-            self._log(f"  Fault Profile       : {self.fault_filter_var.get()}", "warn")
-            self._log(f"  Fault Count         : {self.num_faults_var.get()}", "warn")
-            self._log("")
-            self._log(
-                "Level 2 UI dropdowns (Switching, VLANs, 802.1Q Trunks, Router-on-a-Stick & EtherChannel) "
-                "are configured! Backend generator & verifier for Level 2 are awaiting implementation.",
-                "muted",
+            fault_types = [chosen_code] if chosen_code else None
+            num_faults = int(self.num_faults_var.get())
+
+            ticket = generate_level1_challenge(
+                self.challenges_dir,
+                num_faults=num_faults,
+                fault_types=fault_types,
+                settings=self.settings,
             )
-            self.status_banner.configure(
-                text="STATUS: Level 2 Troubleshooting Selected (Backend implementation pending)",
-                bg="#1e293b",
-                fg="#38bdf8",
-            )
-            return
-
-        selected_label = self.fault_filter_var.get()
-        chosen_code: str | None = None
-        for label, code in FAULT_FILTER_OPTIONS:
-            if label == selected_label:
-                chosen_code = code
-                break
-
-        fault_types = [chosen_code] if chosen_code else None
-        num_faults = int(self.num_faults_var.get())
-
-        ticket = generate_level1_challenge(
-            self.challenges_dir,
-            num_faults=num_faults,
-            fault_types=fault_types,
-            settings=self.settings,
-        )
         self.current_ticket = ticket
         self.hint_index = 0
 
